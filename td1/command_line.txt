@@ -1,0 +1,1 @@
+g++ -Wall azeaze.cpp -O2 -I /usr/include/eigen3 -o azeaze.exe
