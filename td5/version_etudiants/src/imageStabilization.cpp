@@ -152,10 +152,10 @@ int main(int argc, char **argv)
 			currentPts.col(i) << trackedPoints[i].x, trackedPoints[i].y, 1.0;
 		}
 
-		// 7. 
+		// 7 - 
 		initialPts = H * initialPts;
 
-		// 2. Centering
+		// 2 - Centering
 		Eigen::Matrix3d Hcentering = Eigen::Matrix3d::Identity();
 		Hcentering(0,2) = - frame.size().width / 2;
 		Hcentering(1,2) = - frame.size().height / 2;
@@ -163,11 +163,11 @@ int main(int argc, char **argv)
 		HcenteringInv(0,2) *= -1;
 		HcenteringInv(1,2) *= -1;
 
-		// 5. Center data
+		// 5 - Center data
 		initialPts = Hcentering * initialPts;
 		currentPts = Hcentering * currentPts;
 
-		// 4. System
+		// 4 - System
 		Eigen::MatrixXd A = Eigen::MatrixXd::Zero(2*initialPts.cols(), 4);
 		Eigen::VectorXd b(2*initialPts.cols());
 		for (uint i = 0; i < initialPts.cols(); ++i)
@@ -184,51 +184,72 @@ int main(int argc, char **argv)
 			b(2*i+1) = initialPts(1, i);
 		}
 
-		// 4. Solver
+		// 4 - Solver
 		Eigen::VectorXd x = (A.transpose()*A).inverse() * A.transpose()*b;
 
-		// 1. Zoom
+		// 1 - Zoom
 		Eigen::Matrix3d zoom = Eigen::Matrix3d::Identity();
-		zoom(0, 0) = zoom(1, 1) = 1.3;
+		zoom(0, 0) = zoom(1, 1) = 1.4;
 
-		// 3. Convert the homography from Eigen to opencv
+		// 3 - Convert the homography from Eigen to opencv
 		cv::Mat Hocv(3,3,CV_64F);
 		for(uint i=0; i<3; ++i)
 			for(uint j=0; j<3; ++j)
 				Hocv.at<double>(i,j) = (HcenteringInv * zoom * Hcentering * H)(i,j);
 
-		// 6. Extract Rotation
+		// 6 - Extract Rotation
 		Eigen::Matrix3d M = Eigen::Matrix3d::Identity();
 		M(0,0) = M(1,1) = x(0);
 		M(0,1) = x(1);
 		M(1,0) = -x(1);
 
-		// 6. Translation
+		// 9 - Translation clamp
+		double translationMax = 100;
+		if (fabs(x(2) > translationMax))
+			x(2) = translationMax*x(2) / fabs(x(2));
+		if (fabs(x(3) > translationMax))
+			x(3) = translationMax*x(3) / fabs(x(3));
+
+		// 6 - Translation
 		M(0,2) = x(2);
 		M(1,2) = x(3);
 
-		// 7. use M
-		H = HcenteringInv * M * Hcentering;
+		// 8 - Enforce rotation (SVD : Décomposition en Valeurs Singulières)
+		Eigen::JacobiSVD<Eigen::Matrix2d> svd(M.topLeftCorner(2,2), Eigen::ComputeFullU|Eigen::ComputeFullV);
+		M.topLeftCorner(2,2) = svd.matrixU()*svd.matrixV().transpose();
+
+		// 9 - Rotation Clamp
+		double angleMax = 15.0 * M_PI / 180.0; // 15 degrés en radians
+		double angle = asin(M(1,0));
+		if (fabs(angle) > angleMax)
+			angle = angleMax * angle / fabs(angle);
+		M(0,0) = M(1,1) = cos(angle);
+		M(1,0) = sin(angle);
+		M(0,1) = -sin(angle);
+
+		// 7 - use M
+		double epsilon = .15;
+		H = epsilon*Eigen::Matrix3d::Identity() + (1-epsilon)*HcenteringInv * M * Hcentering;
 
 		// if not enough points to track
 		if(currentPts.cols() < 2)
 			H = Eigen::Matrix3d::Identity();
 
-		// apply the homography to finalImage
+		// Apply the homography to finalImage
 		cv::Mat outputImage;
 		cv::warpPerspective(finalImage, outputImage, Hocv, finalImage.size(), cv::INTER_LINEAR, cv::BORDER_CONSTANT);
 
-		// image stabilization end
+		// Image stabilization end
 		///////////////////////////////////////////////////////////////////////////////////////////
 
-		// display the image
+		// Display the image
 		cv::imshow("input video",frame);
 		cv::imshow("stabilization",outputImage);
 
-		// copy the last grab gray scale image to previous
+		// Copy the last grab gray scale image to previous
 		gray.copyTo(grayPrevious);
 
-		// events (quit)
+		// Events (quit)
 		switch(char(cv::waitKey(10))){
 			case 27  : loop=false; break;
 			case 'Q' :
