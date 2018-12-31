@@ -52,18 +52,49 @@ Eigen::VectorXd solvePolynomialRoots(const Eigen::VectorXd &p, const unsigned in
 	return c.diagonal();
 }
 
+
+Eigen::VectorXd rootsRafinement(const Eigen::VectorXd &p, Eigen::VectorXd &roots, const unsigned int nbIter) {
+	// Derivate of a polynomial
+	Eigen::VectorXd pDerivative = p.tail(p.size()-1);
+	for (int i = 0; i < pDerivative.size(); ++i)
+	{
+		pDerivative(i) *= i+1;
+	}
+
+	// Newton
+	for (int r = 0; r < roots.size(); ++r)
+	{
+		for (unsigned int i = 0; i < nbIter; ++i)
+		{
+			roots(r) = roots(r) - (evalPolynomial(p, roots(r)) / evalPolynomial(pDerivative, roots(r)));
+		}
+	}
+	
+
+	return roots;
+}
+
 int main()
 {
-	Eigen::VectorXd p1(3);
-	p1 << 1, 2, 3;
-	std::cout << evalPolynomial(p1, 2) << std::endl;
+	// Eigen::VectorXd p1(3);
+	// p1 << 1, 2, 3;
+	// std::cout << evalPolynomial(p1, 2) << std::endl;
 
-	Eigen::VectorXd r(10);
-	r << 1, 1, 3000, 4, 5, 6, 7, 8, 1000, 10;
-	Eigen::VectorXd p2 = polynomialFromRoots(r);
-	std::cout << p2 << std::endl;
+	// Eigen::VectorXd r(3);
+	// r << 1, 2, 3;
+	// Eigen::VectorXd p2 = polynomialFromRoots(r);
+	// std::cout << p2 << std::endl;
 
-	std::cout << solvePolynomialRoots(p2, 150) << std::endl;
+	// std::cout << solvePolynomialRoots(p2, 150) << std::endl;
 
+
+	Eigen::VectorXd roots(5);
+	roots << 1, 2, 3, 4, 5;
+	Eigen::VectorXd p = polynomialFromRoots(roots);
+	roots = solvePolynomialRoots(p, 20);
+	std::cout << "ROOTS 1" << std::endl << roots << std::endl;
+	roots = rootsRafinement(p, roots, 20);
+	std::cout << "ROOTS 2" << std::endl << roots << std::endl;
+ 
 	return 0;
 }
